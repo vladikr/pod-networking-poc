@@ -32,10 +32,12 @@ sed -i "s/MYMAC/${MAC}/g" testvm.xml
 #ip address add 10.32.0.3 dev dummy0
 #ip link set up dev dummy0
 
-GATEWAY="${IP%.*}.1/12"
+GATEWAY="${IP%.*}.1"
+FAKE_RESERVED_IP="${IP%.*}.254/12"
+
 ip link add link eth0 macvlan0 type macvlan mode bridge
 ip link set macvlan0 up
-ip address add $GATEWAY dev macvlan0
+ip address add $FAKE_RESERVED_IP dev macvlan0
 
 
 #curl -L  https://download.fedoraproject.org/pub/fedora/linux/releases/27/CloudImages/x86_64/images/Fedora-Cloud-Base-27-1.6.x86_64.raw.xz -o fedora.raw.xz
@@ -101,7 +103,7 @@ virsh start testvm
 
 sleep 5
 
-dnsmasq -q --no-hosts --no-resolv --strict-order --dhcp-authoritative --bind-dynamic --interface=macvlan0 --dhcp-range=$IP,static --dhcp-host=$MAC,$IP --user=root --log-dhcp --log-facility=/tmp/dm.log
+dnsmasq -q --no-hosts --no-resolv --strict-order --dhcp-authoritative --bind-dynamic --interface=macvlan0 --dhcp-range=$IP,static --dhcp-host=$MAC,$IP --dhcp-option=3,$GATEWAY --user=root --log-dhcp --log-facility=/tmp/dm.log
 
 ping $IP
 while true; do sleep 5; done
