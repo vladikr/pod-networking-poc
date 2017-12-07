@@ -2,8 +2,6 @@
 
 set -x
 
-#wget https://download.fedoraproject.org/pub/fedora/linux/releases/27/CloudImages/x86_64/images/Fedora-Cloud-Base-27-1.6.x86_64.raw.xz -O fedora.raw.xz
-
 nic_field() { ip address show eth0 | awk "{ for(i=0;i<NF;i++) { if (\$i == \"$1\") { print \$(i+1); next; } } }" ; }
 IP=$(nic_field inet | egrep -o "^[0-9.]+")
 IPNET=$(nic_field inet)
@@ -28,6 +26,7 @@ ip link set eth0 up
 
 sed -i "s/MYMAC/${MAC}/g" testvm.xml
 
+#Dummy device
 #ip link add dummy0 type dummy
 ##ip link set dev dummy0 02:00:00:00:00:00
 #ip address add 10.32.0.3 dev dummy0
@@ -38,8 +37,6 @@ ip link add link eth0 macvlan0 type macvlan mode bridge
 ip link set macvlan0 up
 ip address add $GATEWAY dev macvlan0
 
-
-#dnsmasq --no-hosts --no-resolv --strict-order --bind-interfaces --interface=eth0 --except-interface=lo --dhcp-range=$IP,$IP --dhcp-host=5a:cb:1b:2a:a3:e4,$IP --user=root
 
 #curl -L  https://download.fedoraproject.org/pub/fedora/linux/releases/27/CloudImages/x86_64/images/Fedora-Cloud-Base-27-1.6.x86_64.raw.xz -o fedora.raw.xz
 #xz -d fedora.raw.xz
@@ -90,8 +87,6 @@ fi
 
 mount --rbind /host-sys/fs/cgroup /sys/fs/cgroup
 
-#qemu-system-x86_64 -nographic -name df
-
 /usr/sbin/virtlogd -f /etc/libvirt/virtlogd.conf &
 sleep 5
 
@@ -100,16 +95,13 @@ libvirtd &
 sleep 5
 
 ip addr del $IPNET dev eth0
-#ip addr add 172.17.0.5 dev eth0
 
 virsh define testvm.xml
 virsh start testvm
 
 sleep 5
 
-#dnsmasq -q --dhcp-authoritative --bind-dynamic --listen=dummy0 --listen=macvtap* --bridge-interface=dummy0,macvtap0 --dhcp-range=$IP,$IP --dhcp-host=5a:cb:1b:2a:a3:e4,$IP --user=root --log-dhcp --log-facility=/tmp/dm.log --dhcp-broadcast=
-
-dnsmasq -q --no-hosts --no-resolv --strict-order --dhcp-authoritative --bind-dynamic --interface=macvlan0 --dhcp-range=$IP,static --dhcp-host=$MAC,$IP --user=root --log-dhcp --log-facility=/tmp/dm.log --dhcp-broadcast= 2>/tmp/dnsmasq.errors
+dnsmasq -q --no-hosts --no-resolv --strict-order --dhcp-authoritative --bind-dynamic --interface=macvlan0 --dhcp-range=$IP,static --dhcp-host=$MAC,$IP --user=root --log-dhcp --log-facility=/tmp/dm.log
 
 ping $IP
 while true; do sleep 5; done
