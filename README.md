@@ -14,6 +14,6 @@ kubectl apply -f https://github.com/weaveworks/weave/releases/download/v1.9.4/we
 ```
 3. Start the POD:
 ```shell
-kubectl  create -f libvirt-macvtap.d
+kubectl  create -f libvirt-scdhcp.d
 ```
 
