@@ -8,9 +8,12 @@ Prerequisites:
 # On minikube:
 
 1. Setup minikube
-2. Setup weave netowkring plugin
-   `kubectl apply -f https://github.com/weaveworks/weave/releases/download/v1.9.4/weave-daemonset-k8s-1.6.yaml`
+2. Setup weave networking plugin:
+```shell
+kubectl apply -f https://github.com/weaveworks/weave/releases/download/v1.9.4/weave-daemonset-k8s-1.6.yaml
+```
 3. Start the POD:
-   `kubectl  create -f libvirt-macvtap.d`
-
+```shell
+kubectl  create -f libvirt-scdhcp.d
+```
 
