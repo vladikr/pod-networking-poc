@@ -21,20 +21,6 @@ ping download.fedoraproject.org -c 4
 
 curl -L http://download.cirros-cloud.net/0.3.5/cirros-0.3.5-x86_64-disk.img -o fedora.raw
 
-ip link set dev eth0 down
-macchanger -r eth0
-ip link set eth0 up
-
-sed -i "s/MYMAC/${MAC}/g" testvm.xml
-
-GATEWAY="${IP%.*}.1"
-FAKE_RESERVED_IP="10.11.12.13"
-FAKE_RESERVED_IP_CIDR="${FAKE_RESERVED_IP}/32"
-
-ip link add link eth0 macvlan0 type macvlan mode bridge
-ip link set macvlan0 up
-ip address add $FAKE_RESERVED_IP_CIDR dev macvlan0
-
 # HACK
 # Use hosts's /dev to see new devices and allow macvtap
 mkdir /dev.container && {
@@ -87,13 +73,13 @@ libvirtd &
 
 sleep 5
 
-ip addr del $IPNET dev eth0
+./setup &
+
+sleep 10
 
 virsh define /testvm.xml
 virsh start testvm
 
 sleep 5
-
-/scdhcpd $MAC $IP_CIDR macvlan0 $FAKE_RESERVED_IP $GATEWAY 8.8.8.8 &
 
 while true; do sleep 5; done

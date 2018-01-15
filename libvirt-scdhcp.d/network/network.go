@@ -2,10 +2,13 @@ package network
 
 import (
 	"fmt"
+	"log"
 	"net"
 
 	"github.com/vishvananda/netlink"
-	"kubevirt.io/kubevirt/pkg/log"
+	//"kubevirt.io/kubevirt/pkg/log"
+
+	"./dhcp"
 
 	lmf "github.com/subgraph/libmacouflage"
 )
@@ -13,22 +16,23 @@ import (
 const (
 	podInterface     = "eth0"
 	macVlanIfaceName = "macvlan0"
-	macVlanFakeIP    = "10.11.12.13"
+	macVlanFakeIP    = "10.11.12.13/24"
+	guestDNS         = "8.8.8.8"
 )
 
 type VIF struct {
 	Name    string
 	IP      netlink.Addr
 	MAC     net.HardwareAddr
-	Gateway string
+	Gateway net.IP
 }
 
-// This method will prepare the pod management network to be used by a virtual machine
+// SetupDefaultPodNetwork will prepare the pod management network to be used by a virtual machine
 // which will own the pod network IP and MAC. Pods MAC address will be changed to a
 // random address and IP will be deleted. This will also create a macvlan device with a fake IP.
 // DHCP server will be started and bounded to the macvlan interface to server the original pod ip
 // to the guest OS
-func SetupDefaultPodNetwork() error {
+func SetupDefaultPodNetwork() (net.HardwareAddr, error) {
 	// Get IP and MAC
 	// Change eth0 MAC
 	// Create macvlan and set fake address
@@ -38,37 +42,41 @@ func SetupDefaultPodNetwork() error {
 	nic := &VIF{Name: podInterface}
 	link, err := netlink.LinkByName(podInterface)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to get a link for interface: %s", podInterface)
-		return err
+		log.Printf("failed to get a link for interface: %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to get a link for interface: %s", podInterface)
+		return nil, err
 	}
 
 	// get IP address
 	addrList, err := netlink.AddrList(link, netlink.FAMILY_V4)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to get an ip address for %s", podInterface)
-		return err
+		log.Printf("failed to get an ip address for %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to get an ip address for %s", podInterface)
+		return nil, err
 	}
 	if len(addrList) == 0 {
-		return fmt.Errorf("No IP address found on %s", podInterface)
+		return nil, fmt.Errorf("No IP address found on %s", podInterface)
 	}
 	nic.IP = addrList[0]
 
 	// Get interface gateway
 	routes, err := netlink.RouteList(link, netlink.FAMILY_V4)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to get routes for %s", podInterface)
-		return err
+		log.Printf("failed to get routes for %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to get routes for %s", podInterface)
+		return nil, err
 	}
 	if len(routes) == 0 {
-		return fmt.Errorf("No gateway address found in routes for %s", podInterface)
+		return nil, fmt.Errorf("No gateway address found in routes for %s", podInterface)
 	}
-	nic.Gateway = routes[0].Gw.String()
+	nic.Gateway = routes[0].Gw
 
 	// Get interface MAC address
 	mac, err := GetMacDetails(podInterface)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to get MAC for %s", podInterface)
-		return err
+		log.Printf("failed to get MAC for %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to get MAC for %s", podInterface)
+		return nil, err
 	}
 	nic.MAC = mac
 
@@ -76,26 +84,29 @@ func SetupDefaultPodNetwork() error {
 	err = netlink.AddrDel(link, &nic.IP)
 
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to delete link for interface: %s", podInterface)
-		return err
+		log.Printf("failed to delete link for interface: %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to delete link for interface: %s", podInterface)
+		return nil, err
 	}
 
 	// Set interface link to down to change its MAC address
 	err = netlink.LinkSetDown(link)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to bring link down for interface: %s", podInterface)
-		return err
+		log.Printf("failed to bring link down for interface: %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to bring link down for interface: %s", podInterface)
+		return nil, err
 	}
 
 	_, err = ChangeMacAddr(podInterface)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = netlink.LinkSetUp(link)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to bring link up for interface: %s", podInterface)
-		return err
+		log.Printf("failed to bring link up for interface: %s", podInterface)
+		//log.Log.Reason(err).Errorf("failed to bring link up for interface: %s", podInterface)
+		return nil, err
 	}
 
 	// Create a macvlan link
@@ -109,39 +120,59 @@ func SetupDefaultPodNetwork() error {
 
 	//Create macvlan interface
 	if err := netlink.LinkAdd(macvlan); err != nil {
-		log.Log.Reason(err).Errorf("failed to create macvlan interface")
-		return err
+		log.Printf("failed to create macvlan interface")
+		//log.Log.Reason(err).Errorf("failed to create macvlan interface")
+		return nil, err
 	}
 
 	//get macvlan link
 	macvlink, err := netlink.LinkByName(macVlanIfaceName)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to get a link for interface: %s", macVlanIfaceName)
-		return err
+		log.Printf("failed to get a link for interface: %s", macVlanIfaceName)
+		//log.Log.Reason(err).Errorf("failed to get a link for interface: %s", macVlanIfaceName)
+		return nil, err
 	}
 	err = netlink.LinkSetUp(macvlink)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to bring link up for interface: %s", macVlanIfaceName)
-		return err
+		log.Printf("failed to bring link up for interface: %s", macVlanIfaceName)
+		//log.Log.Reason(err).Errorf("failed to bring link up for interface: %s", macVlanIfaceName)
+		return nil, err
 	}
 
 	// set fake ip on macvlan interface
-	fakeaddr, _ := netlink.ParseAddr(macVlanFakeIP)
+	fakeaddr, err := netlink.ParseAddr(macVlanFakeIP)
+	if err != nil {
+		log.Printf("failed to bring link up for interface: %s", macVlanIfaceName)
+		//log.Log.Reason(err).Errorf("failed to bring link up for interface: %s", macVlanIfaceName)
+		return nil, err
+	}
+
 	if err := netlink.AddrAdd(macvlink, fakeaddr); err != nil {
-		log.Log.Reason(err).Errorf("failed to set macvlan IP")
-		return err
+		log.Printf("failed to set macvlan IP")
+		//log.Log.Reason(err).Errorf("failed to set macvlan IP")
+		return nil, err
 	}
 
 	// Start DHCP
+	go dhcp.SingleClientDHCPServer(
+		nic.MAC,
+		nic.IP.IP,
+		nic.IP.Mask,
+		macVlanIfaceName,
+		fakeaddr.IP,
+		nic.Gateway,
+		net.ParseIP(guestDNS),
+	)
 
-	return nil
+	return nic.MAC, nil
 }
 
 // GetMacDetails from an interface
 func GetMacDetails(iface string) (net.HardwareAddr, error) {
 	currentMac, err := lmf.GetCurrentMac(iface)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to get mac information for interface: %s", iface)
+		log.Printf("failed to get mac information for interface: %s", iface)
+		//log.Log.Reason(err).Errorf("failed to get mac information for interface: %s", iface)
 		return nil, err
 	}
 	return currentMac, nil
@@ -158,7 +189,8 @@ func ChangeMacAddr(iface string) (net.HardwareAddr, error) {
 
 	changed, err := lmf.SpoofMacRandom(iface, false)
 	if err != nil {
-		log.Log.Reason(err).Errorf("failed to spoof MAC for iface: %s", iface)
+		log.Printf("failed to spoof MAC for iface: %s", iface)
+		//log.Log.Reason(err).Errorf("failed to spoof MAC for iface: %s", iface)
 		return nil, err
 	}
 
@@ -167,7 +199,8 @@ func ChangeMacAddr(iface string) (net.HardwareAddr, error) {
 		if err != nil {
 			return nil, err
 		}
-		log.Log.Reason(err).Errorf("Updated Mac for iface: %s - %s", iface, mac)
+		log.Printf("Updated Mac for iface: %s - %s", iface, mac)
+		//log.Log.Reason(err).Errorf("Updated Mac for iface: %s - %s", iface, mac)
 	}
 	return currentMac, nil
 }

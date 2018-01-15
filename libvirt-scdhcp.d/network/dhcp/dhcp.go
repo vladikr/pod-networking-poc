@@ -1,10 +1,9 @@
-package main
+package dhcp
 
 import (
 	"bytes"
 	"log"
 	"net"
-	"os"
 	"time"
 
 	dhcp "github.com/krolaw/dhcp4"
@@ -13,6 +12,7 @@ import (
 
 const infiniteLease = 999 * 24 * time.Hour
 
+/*
 func main() {
 	clientMAC, err := net.ParseMAC(os.Args[1])
 	CheckError(err)
@@ -35,6 +35,7 @@ func main() {
 	)
 	CheckError(err)
 }
+*/
 
 func SingleClientDHCPServer(
 	clientMAC net.HardwareAddr,
